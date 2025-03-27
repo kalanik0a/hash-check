@@ -29,6 +29,8 @@ Run the script using Python and provide the appropriate arguments. Below are the
 | `--file`               | `-f`  | File path to hash and validate.                                            |
 | `--checksum-file`      | `-cf` | Path to a checksum file containing `<hash> <filename>` pairs.              |
 | `--directory`          | `-dr` | Directory to scan for files when using a checksum file.                    |
+| `--output-file`        | `-of` | Output file for hash checksums |
+| `--verbose`            | `-v`  | Verbose output |
 
 ### Examples
 
@@ -47,6 +49,16 @@ If no digest algorithm is specified, the program defaults to SHA1:
 ```
 python hash-check.py -f example.txt -x <hash>
 ```
+
+### Output A Checksum File
+```
+python hash-check.py -dr /path/to/directory -d sha256 -of checksums.sum -r 
+
+python hash-check.py --directory /path/to/directory --digest sha256 --output-file checksums.sum --recursive 
+
+python hash-check.py --file filename.ext  --digest sha256 --checksum-file checksum.sum --verbose
+```
+
 ### Output Messages
 - file hashes match - OK: All hashes match successfully.
 - hash validation failure - ERROR: One or more hashes do not match.
