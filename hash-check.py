@@ -3,11 +3,10 @@ import hashlib
 import os
 import sys
 from pathlib import Path
-from queue import Queue
-from threading import Thread
+from multiprocessing import Process, Queue, cpu_count
 
 DEFAULT_DIGEST = "sha1"
-NUM_WORKERS = 4
+NUM_WORKERS = cpu_count()
 
 
 def parse_arguments():
@@ -108,24 +107,27 @@ def process_checksum_file(checksum_file, directory, digest_algorithm):
     return all_match, missing_files, extra_files
 
 
-def worker(queue, digest_algorithm, results):
+def worker(input_queue, output_queue, digest_algorithm):
     """
-    Worker function for processing files from a queue.
+    Worker function for processing files from an input queue and storing results in an output queue.
     Args:
-        queue (Queue): Queue containing file paths.
+        input_queue (Queue): Queue containing file paths and expected hashes.
+        output_queue (Queue): Queue to store results.
         digest_algorithm (str): Hash digest algorithm.
-        results (list): Shared list to store results.
     """
-    while not queue.empty():
-        file_path, expected_hash = queue.get()
-        match = process_file(file_path, expected_hash, digest_algorithm)
-        results.append((file_path, match))
-        queue.task_done()
+    while not input_queue.empty():
+        try:
+            file_path, expected_hash = input_queue.get_nowait()
+            match = process_file(file_path, expected_hash, digest_algorithm)
+            output_queue.put((file_path, match))
+        except Exception as e:
+            output_queue.put((file_path, False, str(e)))
+
 
 
 def process_directory_with_queue(directory, checksum_map, digest_algorithm):
     """
-    Processes files in a directory using a queue and multiple threads.
+    Processes files in a directory using multiprocessing with input and output queues.
     Args:
         directory (Path): Path to the directory.
         checksum_map (dict): Mapping of file names to expected hashes.
@@ -133,34 +135,42 @@ def process_directory_with_queue(directory, checksum_map, digest_algorithm):
     Returns:
         tuple: (bool, list, list) - Validation result, missing files, extra files.
     """
-    queue = Queue()
+    input_queue = Queue()
+    output_queue = Queue()
     results = []
     missing_files = []
     extra_files = []
 
+    # Populate the input queue with files to process
     for file_name, expected_hash in checksum_map.items():
         file_path = directory / file_name
         if not file_path.exists():
             missing_files.append(file_name)
         else:
-            queue.put((file_path, expected_hash))
+            input_queue.put((file_path, expected_hash))
 
-    threads = []
+    # Start worker processes
+    processes = []
     for _ in range(NUM_WORKERS):
-        thread = Thread(target=worker, args=(queue, digest_algorithm, results))
-        thread.start()
-        threads.append(thread)
+        process = Process(target=worker, args=(input_queue, output_queue, digest_algorithm))
+        process.start()
+        processes.append(process)
 
-    queue.join()
+    # Wait for all processes to finish
+    for process in processes:
+        process.join()
 
-    for thread in threads:
-        thread.join()
+    # Collect results from the output queue
+    while not output_queue.empty():
+        results.append(output_queue.get())
 
+    # Identify extra files in the directory
     for file_path in directory.iterdir():
         if file_path.name not in checksum_map:
             extra_files.append(file_path.name)
 
-    all_match = all(match for _, match in results)
+    # Determine if all files matched
+    all_match = all(match for _, match in results if match is not None)
     return all_match, missing_files, extra_files
 
 
