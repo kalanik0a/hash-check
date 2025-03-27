@@ -56,7 +56,7 @@ python hash-check.py -dr /path/to/directory -d sha256 -of checksums.sum -r
 
 python hash-check.py --directory /path/to/directory --digest sha256 --output-file checksums.sum --recursive 
 
-python hash-check.py --file filename.ext  --digest sha256 --checksum-file checksum.sum --verbose
+python hash-check.py --file filename.ext  --digest sha256 --output-file checksum.sum --verbose
 ```
 
 ### Output Messages
