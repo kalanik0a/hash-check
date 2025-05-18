@@ -7,7 +7,8 @@ import queue
 import re
 import threading
 from multiprocessing import Process, Queue, cpu_count, Manager
-
+from multasker.util import File
+from multasker.log import Logger
 DEFAULT_DIGEST = "sha1"
 NUM_WORKERS = cpu_count()
 
@@ -133,34 +134,16 @@ def validate_path(path):
         raise FileNotFoundError(f"Path does not exist: {path}")
     return resolved_path
 
-def get_optimal_buffer_size(file_path):
-    size = os.path.getsize(file_path)
-
-    if size < 512 * 1024:            # < 512KB
-        return 512 * 1024             # 512KB
-    elif size < 4 * 1024 * 1024:       # < 4MB
-        return 4 * 1024 * 1024       # 4MB
-    elif size < 32 * 1024 * 1024:    # < 32MB
-        return 32 * 1024 * 1024      # 32MB
-    else:
-        return 64 * 1024 * 1024      # ≥ 32MB → 64MB
-
 def compute_hash(file_path, digest_algorithm, verbose):
     """
     Computes the hash of a file using the specified digest algorithm with a timeout.
     """
     def hash_file():
         nonlocal result, error
-        try:
-            hash_func = hashlib.new(digest_algorithm)
-            with open(file_path, "rb") as f:
-                for chunk in iter(lambda: f.read(get_optimal_buffer_size(file_path)), b""):
-                    hash_func.update(chunk)
-            result = hash_func.hexdigest()
-            if (verbose):
-                print(f"{result} {file_path}")
-        except Exception as e:
-            error = e
+        result = File.hash_file(file_path=file_path, digest_algorithm=digest_algorithm, chunk_size=4096, logger=Logger())
+
+        if result is None:
+            error = OSError(f'Could not hash file: {file_path}')
 
     result = None
     error = None
@@ -186,6 +169,7 @@ def process_file(file_path, expected_hash, digest_algorithm, verbose):
         bool: True if the hashes match, False otherwise.
     """
     computed_hash = compute_hash(file_path, digest_algorithm, verbose)
+    print(computed_hash)
     return computed_hash == expected_hash
 
 
